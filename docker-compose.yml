@@ -1,0 +1,58 @@
+version: '3.8'
+
+services:
+  valhalla:
+    image: ghcr.io/gis-ops/docker-valhalla/valhalla:latest
+    container_name: accessroute-valhalla
+    restart: unless-stopped
+    ports:
+      - "8002:8002"
+    environment:
+      # Optional: set custom tile build parameters
+      - build_elevation=True
+      - build_admins=True
+      - build_time_zones=True
+      - serve_tiles=True
+      - force_rebuild=False
+      - min_x=72.7
+      - min_y=18.8
+      - max_x=73.2
+      - max_y=19.3
+      # Or specify a custom URL to download OSM .pbf automatically on startup:
+      # - tile_urls=https://download.geofabrik.de/asia/india-latest.osm.pbf
+    volumes:
+      - ./valhalla_tiles:/custom_files
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:8002/status || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  backend:
+    build:
+      context: .
+      dockerfile: Dockerfile.backend
+    container_name: accessroute-backend
+    restart: unless-stopped
+    ports:
+      - "8000:8000"
+    environment:
+      - VALHALLA_URL=http://valhalla:8002
+      - PORT=8000
+    env_file:
+      - .env
+    depends_on:
+      - valhalla
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: accessroute-frontend
+    restart: unless-stopped
+    ports:
+      - "5173:5173"
+    environment:
+      - VITE_API_URL=http://localhost:8000/api
+    depends_on:
+      - backend
